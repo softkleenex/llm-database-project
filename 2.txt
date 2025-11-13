@@ -1,0 +1,383 @@
+# 
+
+ 1-3)쿼리: TYPE 1부터 10까지, 순차적으로 작성했습니다. 
+
+```python
+--============================================
+--Type 1: Single-table query (Selection + Projection)
+--============================================
+-- 설명: Team Leader인 유저의 ID, 이름, 이메일 조회 
+-- 목적: 사내 Team Leader들
+
+SELECT user_id, user_name, user_email
+FROM "USER"
+WHERE role = 'Team Leader';
+
+--============================================
+--Type 2: Multi-way join with join predicates in WHERE
+--============================================
+-- 설명: 프로젝트를 생성한 유저의 이름과 해당 유저의 부서명, 프로젝트명 조회 
+-- 목적: 프로젝트 생성자와 소속 부서 정보 파악
+
+SELECT U.user_name, D.department_name, P.project_name
+FROM "USER" U, DEPARTMENT D, PROJECT P
+WHERE U.department_id = D.department_id
+  AND P.creator_user_id = U.user_id;
+
+--============================================
+--Type 3: Aggregation + multi-way join with join predicates + GROUP BY
+--============================================
+-- 설명: 부서별로 생성된 프로젝트 수 집계 
+-- 목적: 부서별 프로젝트 활동량 분석
+
+SELECT D.department_name, COUNT(P.project_id) AS project_count
+FROM DEPARTMENT D, PROJECT P
+WHERE D.department_id = P.department_id
+GROUP BY D.department_name;
+
+--============================================
+--Type 4: Subquery
+--============================================
+-- 설명: 'AI연구팀' 부서에 속한 유저들의 ID와 이름 조회 
+-- 목적: 특정 부서 소속 인원 파악
+
+SELECT user_id, user_name
+FROM "USER"
+WHERE department_id = (
+    SELECT department_id
+    FROM DEPARTMENT
+    WHERE department_name = 'AI연구팀'
+);
+--============================================
+--Type 5: Subquery with EXISTS
+--============================================
+-- 설명: 활성화된 세션을 보유한 유저들의 ID와 이름 조회 
+-- 목적: 현재 세션을 사용 중인 유저 식별
+
+SELECT U.user_id, U.user_name
+FROM "USER" U
+WHERE EXISTS (
+    SELECT 1
+    FROM SESSIONS S
+    WHERE S.user_id = U.user_id
+      AND S.status = '진행중'
+);
+--============================================
+--Type 6: Selection + Projection + IN predicates
+--============================================
+-- 설명: 관리자가 지정된 부서에 속한 프로젝트 ID와 이름 조회 
+-- 목적: 관리자가 있는 부서의 프로젝트 현황 파악
+
+SELECT project_id, project_name
+FROM PROJECT
+WHERE department_id IN (
+    SELECT department_id
+    FROM DEPARTMENT
+    WHERE manager_user_id IS NOT NULL
+);
+--============================================
+--Type 7: In-line view 활용한 Query
+--============================================
+-- 설명: 세션 수가 5개 이상인 유저의 ID, 이름, 세션 수 조회 
+-- 목적: 활발히 활동 중인 유저 식별
+
+SELECT user_id, user_name, session_count
+FROM (
+    SELECT user_id, COUNT(*) AS session_count
+    FROM SESSIONS
+    GROUP BY user_id
+) S JOIN "USER" U ON S.user_id = U.user_id
+WHERE session_count >= 5;
+
+--============================================
+--Type 8: Multi-way join with join predicates in WHERE + ORDER BY
+--============================================
+-- 설명: 세션 로그의 토큰 사용량 기준으로 유저 이름과 로그 정보 조회 
+-- 목적: 토큰 사용량이 많은 세션 로그 분석
+
+SELECT SL.session_id, SL.log_sequence, U.user_name, SL.token_used
+FROM SESSION_LOGS SL, SESSIONS S, "USER" U
+WHERE SL.session_id = S.session_id
+  AND S.user_id = U.user_id
+ORDER BY SL.token_used DESC;
+--============================================
+--Type 9: Aggregation + multi-way join with join predicates + GROUP BY + ORDER BY
+--============================================
+-- 설명: 유저별 세션 수 집계 및 내림차순 정렬 
+-- 목적: 세션 활동량이 많은 유저 순위 파악
+
+SELECT U.user_name, COUNT(S.session_id) AS total_sessions
+FROM "USER" U, SESSIONS S
+WHERE U.user_id = S.user_id
+GROUP BY U.user_name
+ORDER BY total_sessions DESC;
+--============================================
+--Type 10: SET operation (UNION)
+--============================================
+-- 설명: 유저 테이블에서 'Data Scientist' 역할을 가진 유저와 부서 테이블에서 관리자로 지정된 유저 통합 조회 
+-- 목적: 관리자 역할을 수행 중인 유저 전체 파악
+
+SELECT user_id FROM "USER" WHERE role = 'Data Scientist'
+UNION
+SELECT manager_user_id FROM DEPARTMENT WHERE manager_user_id IS NOT NULL;
+```
+
+2)department user project sessions session_logs 
+
+```jsx
+
+================================================================================
+## 1. DEPARTMENT
+================================================================================
+
+### ER Schema
+- **엔티티 타입**: Strong Entity
+- **속성**:
+  * department_id (PK) - 부서 고유 식별자
+  * department_name - 부서 이름
+  * manage_user_id (FK) - 부서 관리자의 관리자 번호
+
+- **관계**:
+  * USER과 1:1 관계 (MANAGES)
+    - 한 명의 USER가 한 DEPARTMENT만 관리할 수 있음
+  * USER과 1:N 관계 (WORKS_FOR)
+    - 하나의 DEPARTMENT에 여러 USER가 속할 수 있음
+    - DEPARTMENT가 1, USER가 N
+  * PROJECT와 1:N의 관계 (BELONGS_TO)
+    -하나의 DEPARTMENT가 여러 PROJECT를 가질 수 있음
+    -DEPARTENT가 1, PROJECT가 N
+
+### Relational Schema 매핑
+```sql
+CREATE TABLE DEPARTMENT (
+    department_id VARCHAR2(50) PRIMARY KEY,
+    department_name VARCHAR2(200) NOT NULL,
+    manager_user_id VARCHAR2(50) UNIQUE -- 부서의 관리자(MANAGES)
+    CONSTRAINT fk_dept_manager 
+       FOREIGN KEY (manager_user_id) REFERENCES "USER"(user_id);
+);
+
+```
+
+### 매핑 설명
+1. Strong Entity이므로 독립적인 테이블로 생성
+2. department_id를 Primary Key로 설정
+3. 1:N 관계는 N쪽(WORKS_FOR, BELONGS_TO)에 Foreign Key로 구현
+4. 1:1 관계인 MANAGES는 manager_user_id를 foreign_key로 추가하여 구현
+5. department_id, department_name은 NOT NULL, manager_user_id는 UNIQUE
+
+================================================================================
+## 2.USER (유저)
+================================================================================
+
+### ER Schema
+- **엔티티 타입**: Strong Entity
+- **속성**:
+  * user_id (PK) - 사용자 고유 번호
+	* user_name - 사용자 이름
+	* user_email - 사용자 이메일
+	* role - 사용자 역할
+	* is_active - 활성 상태 여부 ('Y' 또는 'N')
+	* last_login - 마지막 로그인 시간
+	* department_id (FK) - 소속 부서 번호
+
+- **관계**:
+  * DEPARTMENT와 1:1 관계 (MANAGES)
+    - 한 명의 USER가 한 DEPARTMENT만 관리할 수 있음
+  * DEPARTMENT와 N:1 관계 (WORKS_FOR)
+    - 여러 USER가 하나의 DEPARTMENT에 속할 수 있음
+  * PROJECT와 1:N 관계 (CREATES_PROJ)
+    - 하나의 USER가 여러 PROJECT를 생성할 수 있음
+  * PROMPT_TEMPLATE과 1:N 관계 (CREATES_TEPL)
+    - 하나의 USER가 여러 PROMPT_TEMPLATE을 생성할 수 있음
+  * SESSION과 1:N 관계 (USES)
+		- 하나의 USER가 여러 SESSION을 생성할 수 있음
+
+### Relational Schema 매핑
+```sql
+CREATE TABLE "USER" (
+    user_id VARCHAR2(50) PRIMARY KEY,
+    user_name VARCHAR2(100) NOT NULL,
+    user_email VARCHAR2(200) NOT NULL UNIQUE,
+    role VARCHAR2(50) NOT NULL,
+    is_active CHAR(1) DEFAULT 'Y' CHECK (is_active IN ('Y', 'N')),
+    last_login TIMESTAMP,
+    department_id VARCHAR2(50) NOT NULL,
+    CONSTRAINT fk_user_dept FOREIGN KEY (department_id)
+        REFERENCES DEPARTMENT(department_id) -- 일반 직원의 소속 부서 (WORKS_FOR)
+);
+```
+
+### 매핑 설명
+1. Strong Entity이므로 독립적인 테이블로 생성
+2. user_id를 Primary Key로 설정
+3. user_email은 UNIQUE 제약 조건으로 중복 방지
+4. is_active는 'Y' 또는 'N' 값만 허용하는 CHECK 제약 조건 포함
+5. department_id는 WORKS_FOR 관계를 나타내는 Foreign Key로 설정
+6. MANAGES 관계는 DEPARTMENT 테이블에서 manager_user_id로 구현되므로 USER 테이블에는 별도 속성 없음
+7. 1:N 관계인 CREATES_PROJ, CREATES_TEPL, USES는 각각 PROJECT, PROMPT_TEMPLATE, SESSION 테이블에서 Foreign Key로 구현
+
+================================================================================
+## 3. PROJECT (프로젝트)
+================================================================================
+
+### ER Schema
+- **엔티티 타입**: Strong Entity
+- **속성**:
+	* project_id (PK) - 프로젝트 고유 번호
+	* project_name - 프로젝트 이름
+	* description - 프로젝트 설명
+	* created_at - 생성 일시
+	* creator_user_id (FK) - 생성한 사용자 ID
+	* department_id (FK) - 소속 부서 ID
+
+- **관계**:
+	* USER와 N:1 관계 (CREATES_PROJ)
+		- 여러 PROJECT가 하나의 USER에 의해 생성될 수 있음
+	* DEPARTMENT와 N:1 관계 (BELONGS_TO)
+		- 여러 PROJECT가 하나의 DEPARTMENT에 속할 수 있음
+	* SESSION과 1:N 관계 (RELATED_TO)
+		- 하나의 PROJECT가 여러 SESSION과 관련될 수 있음
+
+### Relational Schema 매핑
+```sql
+CREATE TABLE PROJECT (
+    project_id VARCHAR2(50) PRIMARY KEY,
+    project_name VARCHAR2(200) NOT NULL,
+    description CLOB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    creator_user_id VARCHAR2(50) NOT NULL,
+    department_id VARCHAR2(50) NOT NULL,
+    CONSTRAINT fk_project_user FOREIGN KEY (creator_user_id) 
+        REFERENCES "USER"(user_id), -- 프로젝트 생성유저 (CREATES_PROJ)
+    CONSTRAINT fk_project_dept FOREIGN KEY (department_id) 
+        REFERENCES DEPARTMENT(department_id) -- 프로젝트 소속부서 (BELONGS_TO)
+);
+```
+### 매핑 설명
+1. Strong Entity이므로 독립적인 테이블로 생성
+2. project_id를 Primary Key로 설정
+3. created_at은 기본값으로 현재 시간 설정
+4. creator_user_id는 CREATES_PROJ 관계를 나타내는 Foreign Key로 설정
+5. department_id는 BELONGS_TO 관계를 나타내는 Foreign Key로 설정
+6. RELATED_TO 관계는 SESSION 테이블에서 Foreign Key로 구현
+
+================================================================================
+## 4. SESSIONS (사용 세션)
+================================================================================
+
+### ER Schema
+- **엔티티 타입**: Strong Entity
+- **속성**:
+	* session_id (PK) - 세션 고유 식별자
+	* start_time - 세션 시작 시간
+	* end_time - 세션 종료 시간 (NULL 가능)
+	* session_type - 세션 유형
+	* status - 세션 상태
+	* user_id (FK) - 세션을 생성한 사용자 ID
+	* project_id (FK) - 관련된 프로젝트 ID (NULL 가능)
+	
+- **관계**:
+	* USER와 N:1 관계 (USES)
+		- 하나의 USER가 여러 SESSIONS 생성 가능
+		- SESSIONS가 N, USER가 1
+		- Total Participation: 모든 세션은 반드시 사용자 필요
+	* PROJECT와 N:1 관계 (RELATED_TO)
+		- 하나의 PROJECT가 여러 SESSIONS와 관련 가능
+		- Partial Participation: 세션은 프로젝트 없이 생성 가능
+	* SESSION_LOGS와 1:N 관계 (HAS_SESSION)
+		- 하나의 세션에 여러 로그가 속함
+		- Partial Participation: 세션은 로그 없이 존재 가능
+
+### Relational Schema 매핑
+```sql
+CREATE TABLE SESSIONS (
+    session_id VARCHAR2(50) PRIMARY KEY,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP,
+    session_type VARCHAR2(50) NOT NULL,
+    status VARCHAR2(50) NOT NULL,
+    user_id VARCHAR2(50) NOT NULL,
+    project_id VARCHAR2(50),
+    CONSTRAINT fk_session_user FOREIGN KEY (user_id) 
+        REFERENCES "USER"(user_id), -- 세션을 사용하는 USER (USES)
+    CONSTRAINT fk_session_project FOREIGN KEY (project_id) 
+        REFERENCES PROJECT(project_id), -- 세션을 오픈한 PROJECT. 프로젝트없이 여는것도 가능해서 NULL 가능 (RELATED TO)
+    CONSTRAINT chk_session_time CHECK (end_time IS NULL OR end_time >= start_time)
+);
+```
+
+### 매핑 설명
+1. strong entity이므로 독립적인 테이블로 생성
+2. session_id를 Primary Key로 설정
+3. N:1 관계 구현:
+		- user_id: NOT NULL (Total Participation - 세션은 반드시 사용자 필요)
+		- project_id: NULL 가능 (Partial Participation - 프로젝트 없이 세션 생성 가능)
+4. FOREIGN KEY 제약 조건을 통해 USER 및 PROJECT와의 관계 표현
+5. CHECK 제약 조건으로 시작 시간 이후에만 종료 시간 설정 가능
+
+================================================================================
+## 5.  SESSION_LOGS (Weak Entity - 복합키)
+================================================================================
+
+### ER Schema
+	* session_id (PK, FK) - 상위 엔티티인 SESSIONS의 식별자
+	* log_sequence (PK) - 세션 내 로그 순번
+	* request_time - 요청 발생 시간
+	* request_prompt_s3_path - 요청 프롬프트 저장 경로
+	* response_s3_path - 응답 저장 경로
+	* token_used - 사용된 토큰 수
+	* response_time - 응답 완료 시간
+	* config_id (FK) - 사용된 모델 설정 ID (NULL 가능)
+	* deployment_id (FK) - 사용된 배포 환경 ID
+
+- **관계**:
+	* SESSIONS와 N:1 관계 (HAS_SESSION)
+		- SESSION_LOGS가 N, SESSIONS가 1
+		- Total Participation: 모든 로그는 반드시 세션에 속해야 함
+	* MODEL_CONFIG와 N:1 관계 (APPLIES_CONFIG)
+		- SESSION_LOGS가 N, MODEL_CONFIG가 1
+		- Partial Participation: 설정 없이 생성된 로그 가능
+	* DEPLOYMENTS와 N:1 관계 (DEPLOYED_IN
+		- SESSION_LOGS가 N, DEPLOYMENTS가 1
+		- Total Participation: 모든 로그는 반드시 배포 정보 필요
+
+### Relational Schema 매핑
+```sql
+CREATE TABLE SESSION_LOGS (
+    session_id VARCHAR2(50),
+    log_sequence NUMBER(10),
+    request_time TIMESTAMP NOT NULL,
+    request_prompt_s3_path VARCHAR2(500) NOT NULL,
+    response_s3_path VARCHAR2(500) NOT NULL,
+    token_used NUMBER(10) NOT NULL,
+    response_time TIMESTAMP NOT NULL,
+    config_id VARCHAR2(50),
+    deployment_id VARCHAR2(50) NOT NULL,
+    CONSTRAINT pk_session_logs PRIMARY KEY (session_id, log_sequence),
+    CONSTRAINT fk_logs_session FOREIGN KEY (session_id) 
+        REFERENCES SESSIONS(session_id) ON DELETE CASCADE, -- 소속된 세션 (HAS_SESSION)
+    CONSTRAINT fk_logs_config FOREIGN KEY (config_id) 
+        REFERENCES MODEL_CONFIG(config_id), -- 세션이 사용하는 model config. config 기본값 사용했으면 따로 없으므로 Null 가능.(APPLIES_CONFIG)
+    CONSTRAINT fk_logs_deployment FOREIGN KEY (deployment_id) 
+        REFERENCES DEPLOYMENTS(deployment_id), -- 세션이 사용하는 모델배포버전 (DEPLOYED_IN)
+    CONSTRAINT chk_logs_time CHECK (response_time >= request_time)
+);
+```
+
+### 매핑 설명
+
+1. Weak Entity이므로 상위 엔티티(session_id)를 포함한 복합키로 정의
+2. session_id + log_sequence를 Primary Key로 설정
+3. session_id는 외래 키이며 ON DELETE CASCADE로 상위 세션 삭제 시 로그도 삭제됨
+4. config_id는 NULL 가능 (Partial Participation
+5. deployment_id는 NOT NULL (Total Participation)
+6. CHECK 제약 조건으로 응답 시간이 요청 시간보다 늦거나 같도록 제한
+
+================================================================================
+## ER Schema 수정사항
+================================================================================
+
+### 수정 없음
+- Phase 1에서 작성한 ER Schema를 그대로 Relational Schema로 매핑
+```
