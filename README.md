@@ -2,6 +2,13 @@
 
 A comprehensive database design and implementation project for a Large Language Model (LLM) management platform. This project demonstrates enterprise-level database architecture, SQL programming, and data modeling skills.
 
+## 📅 프로젝트 정보
+
+- **프로젝트**: LLM 플랫폼 데이터베이스 설계
+- **과목**: COMP322 데이터베이스 (경북대학교)
+- **기간**: 2025.11
+- **개발**: 개인 프로젝트
+
 ## 📋 Project Overview
 
 This project implements a complete database system for managing:
@@ -284,3 +291,8 @@ This project is available for educational and non-commercial use.
 ⭐ **Star this repository** if you find it helpful for learning database design!
 
 📧 For questions or feedback, please open an issue on GitHub.
+
+---
+
+**프로젝트 기간**: 2025.11
+**최종 업데이트**: 2025.11
